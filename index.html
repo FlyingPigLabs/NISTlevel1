@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#07131f" />
+    <meta name="description" content="On-device proctoring timer for the NIST Open Lane Level 1 drone flight test." />
+    <title>NIST Level 1 Flight Test</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="site-header">
+        <button class="brand" id="homeButton" type="button" aria-label="Go to test setup">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 44 44" role="img"><path d="M12 19h20M22 12v20M8 15h8v8H8zm20 0h8v8h-8zM8 27h8v8H8zm20 0h8v8h-8z"/></svg>
+          </span>
+          <span>
+            <strong>Open Lane</strong>
+            <small>Level 1 · 10 ft</small>
+          </span>
+        </button>
+        <div class="storage-status"><span class="status-dot"></span> Saved on this device</div>
+      </header>
+
+      <main>
+        <section class="view setup-view is-active" id="setupView" aria-labelledby="setupTitle">
+          <div class="hero-grid">
+            <div class="hero-copy">
+              <p class="eyebrow">Flight test proctor</p>
+              <h1 id="setupTitle">Precision, one prompt at a time.</h1>
+              <p class="lede">A focused timer for the NIST Open Lane Level 1 flight sequence. Every tap completes one step and immediately starts the next.</p>
+              <div class="test-facts" aria-label="Test summary">
+                <div><strong>39</strong><span>timed prompts</span></div>
+                <div><strong>2</strong><span>flight paths</span></div>
+                <div><strong>Local</strong><span>device storage</span></div>
+              </div>
+            </div>
+
+            <form class="setup-card" id="setupForm">
+              <div class="card-heading">
+                <span class="step-kicker">New test</span>
+                <h2>Test details</h2>
+              </div>
+              <label>
+                <span>Proctor name</span>
+                <input id="instructorName" name="instructor" autocomplete="name" required placeholder="Instructor or evaluator" />
+              </label>
+              <label>
+                <span>Pilot name</span>
+                <input id="pilotName" name="pilot" autocomplete="off" required placeholder="Pilot being evaluated" />
+              </label>
+              <label>
+                <span>Drone platform</span>
+                <select id="dronePlatform" name="drone" required>
+                  <option value="" disabled selected>Select a platform</option>
+                  <option>Avata 1</option>
+                  <option>Avata 2</option>
+                  <option>Mini 3</option>
+                  <option>Mini 4</option>
+                  <option>Mavic 3T</option>
+                  <option>Matrice 30T</option>
+                  <option>Matrice 300T</option>
+                  <option>Other</option>
+                </select>
+              </label>
+              <label class="is-hidden" id="customDroneLabel">
+                <span>Custom platform</span>
+                <input id="customDrone" name="customDrone" placeholder="Enter drone model" />
+              </label>
+              <div class="notice">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 17H3L12 3zm0 6v5m0 3v.01"/></svg>
+                <p>Prompts are configured for stand spacing of <strong>10 feet</strong>. Timing begins when the drone leaves the ground.</p>
+              </div>
+              <button class="primary-button" type="submit">Review launch prompt <span>→</span></button>
+            </form>
+          </div>
+
+          <section class="resume-panel is-hidden" id="resumePanel" aria-live="polite">
+            <div>
+              <span class="step-kicker">Test in progress</span>
+              <h2 id="resumeTitle">Resume saved test</h2>
+              <p id="resumeMeta"></p>
+            </div>
+            <button class="secondary-button" id="resumeButton" type="button">Resume test</button>
+          </section>
+
+          <section class="history-section">
+            <div class="section-heading">
+              <div>
+                <span class="step-kicker">This browser</span>
+                <h2>Previous tests</h2>
+              </div>
+              <p>Records remain on this device until browser data is cleared.</p>
+            </div>
+            <div class="history-list" id="historyList">
+              <div class="empty-state">Completed tests will appear here.</div>
+            </div>
+          </section>
+        </section>
+
+        <section class="view briefing-view" id="briefingView" aria-labelledby="briefingTitle">
+          <div class="briefing-card">
+            <div class="briefing-topline"><span>Pre-flight briefing</span><span>Timers not started</span></div>
+            <p class="eyebrow">Prompt 1 of 39</p>
+            <h1 id="briefingTitle">Launch to 10 feet and pitch forward over stand 1.</h1>
+            <p class="briefing-detail">Take a picture of bucket 1.</p>
+            <div class="launch-instruction">
+              <span class="pulse-dot"></span>
+              Tap below at the moment the drone leaves the ground.
+            </div>
+            <dl class="briefing-meta" id="briefingMeta"></dl>
+            <div class="button-row">
+              <button class="text-button" id="backToSetup" type="button">← Edit details</button>
+              <button class="primary-button launch-button" id="startTestButton" type="button">Drone airborne — start test</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="view test-view" id="testView" aria-labelledby="promptTitle">
+          <div class="test-header">
+            <div>
+              <p class="eyebrow" id="pilotLabel">Pilot</p>
+              <h2 id="testIdentity">Flight test</h2>
+            </div>
+            <div class="live-indicator"><span></span> Test live</div>
+          </div>
+
+          <div class="timer-grid">
+            <div class="timer-card timer-card-primary">
+              <span>Current step</span>
+              <strong id="stepTimer">00:00.0</strong>
+            </div>
+            <div class="timer-card">
+              <span>Total elapsed</span>
+              <strong id="totalTimer">00:00.0</strong>
+            </div>
+          </div>
+
+          <div class="progress-block">
+            <div class="progress-label"><span id="stepProgress">Step 1 of 39</span><span id="progressPercent">3%</span></div>
+            <div class="progress-track"><span id="progressBar"></span></div>
+          </div>
+
+          <article class="prompt-card">
+            <span class="prompt-number" id="promptNumber">01</span>
+            <div>
+              <p class="step-kicker">Current instruction</p>
+              <h1 id="promptTitle">Launch to 10 feet and pitch forward over stand 1.</h1>
+              <p id="promptDetail">Take a picture of bucket 1.</p>
+            </div>
+          </article>
+
+          <div class="next-preview" id="nextPreview">
+            <span>Up next</span>
+            <p id="nextPrompt">Gimbal up and take a picture of bucket 2A.</p>
+          </div>
+
+          <button class="complete-button" id="nextStepButton" type="button">
+            <span><small>Tap when complete</small><strong>Complete step &amp; continue</strong></span>
+            <span class="button-arrow">→</span>
+          </button>
+          <p class="save-confirmation" id="saveConfirmation" aria-live="polite">Step results save automatically after every tap.</p>
+        </section>
+
+        <section class="view results-view" id="resultsView" aria-labelledby="resultsTitle">
+          <div class="results-hero">
+            <div class="completion-badge" aria-hidden="true">✓</div>
+            <p class="eyebrow">Test complete</p>
+            <h1 id="resultsTitle">Flight test results</h1>
+            <p id="resultsSubtitle"></p>
+            <div class="total-result">
+              <span>Total elapsed time</span>
+              <strong id="resultTotal">00:00.0</strong>
+            </div>
+          </div>
+
+          <div class="results-actions no-print">
+            <button class="primary-button" id="printButton" type="button">Print / Save PDF</button>
+            <button class="secondary-button" id="jsonButton" type="button">Download JSON</button>
+            <button class="secondary-button" id="csvButton" type="button">Download CSV</button>
+            <button class="text-button" id="newTestButton" type="button">Start another test</button>
+          </div>
+
+          <section class="report-sheet" id="reportSheet">
+            <div class="report-header">
+              <div>
+                <p>NIST Open Lane · Level 1 · 10 ft</p>
+                <h2>Flight Test Results</h2>
+              </div>
+              <span id="reportId"></span>
+            </div>
+            <dl class="report-meta" id="reportMeta"></dl>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>#</th><th>Prompt</th><th>Completed</th><th>Step time</th><th>Cumulative</th></tr></thead>
+                <tbody id="resultsTableBody"></tbody>
+              </table>
+            </div>
+            <div class="report-total"><span>Total time</span><strong id="reportTotal"></strong></div>
+            <div class="review-fields">
+              <p>Photos reviewed by: <span></span></p>
+              <p>Photos 100% correct: <span class="check-box"></span> Yes <span class="check-box"></span> No</p>
+            </div>
+            <p class="report-footnote">Generated locally by the Open Lane Level 1 proctoring tool. This report records timing and entered test details.</p>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
