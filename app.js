@@ -18,7 +18,7 @@ const PROMPTS = [
   ["Pitch forward over the landing pad, then yaw right 180°.", "Take a picture of the landing pad."],
   ["Gimbal up.", "Take a picture of bucket 1A."],
   ["Land and launch to 10 feet.", "Continue when the drone is airborne."],
-  ["Hold position.", "Take a picture of bucket 1A."],
+  ["Once at 10 feet, take a picture of bucket 1A.", ""],
   ["Orbit left 90°.", "Take a picture of bucket 1B."],
   ["Roll left.", "Take a picture of bucket 2B."],
   ["Roll left.", "Take a picture of bucket 3B."],
@@ -28,7 +28,7 @@ const PROMPTS = [
   ["Roll left.", "Take a picture of bucket 1D."],
   ["Orbit left 90°.", "Take a picture of bucket 1A."],
   ["Land and launch to 10 feet.", "Continue when the drone is airborne."],
-  ["Hold position.", "Take a picture of bucket 1A."],
+  ["Once at 10 feet, take a picture of bucket 1A.", ""],
   ["Orbit right 90°.", "Take a picture of bucket 1D."],
   ["Roll right.", "Take a picture of bucket 2D."],
   ["Roll right.", "Take a picture of bucket 3D."],
@@ -48,9 +48,12 @@ let currentTest = null;
 let pendingTest = null;
 let timerHandle = null;
 let wakeLock = null;
+let reviewSteps = [];
+let reviewIndex = 0;
 
 const $ = (id) => document.getElementById(id);
-const views = ["setupView", "briefingView", "testView", "resultsView"];
+const views = ["setupView", "briefingView", "testView", "resultsView", "reviewView"];
+const LANDING_STEP_NUMBERS = new Set([19, 29, 39]);
 
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -155,8 +158,8 @@ function renderCurrentStep() {
   if (!currentTest || currentTest.status !== "active") return;
   const index = currentTest.currentStepIndex;
   const [title, detail] = splitPrompt(index);
-  $("pilotLabel").textContent = `Pilot · ${currentTest.pilot}`;
-  $("testIdentity").textContent = `${currentTest.drone} · ${currentTest.instructor}`;
+  $("pilotLabel").textContent = currentTest.pilot;
+  $("testIdentity").textContent = currentTest.drone;
   $("stepProgress").textContent = `Step ${index + 1} of ${PROMPTS.length}`;
   const percent = Math.round(((index + 1) / PROMPTS.length) * 100);
   $("progressPercent").textContent = `${percent}%`;
@@ -165,9 +168,12 @@ function renderCurrentStep() {
   $("promptTitle").textContent = title;
   $("promptDetail").textContent = detail;
   const isFinal = index === PROMPTS.length - 1;
+  const isLanding = LANDING_STEP_NUMBERS.has(index + 1);
   $("nextPrompt").textContent = isFinal ? "Results and export options" : fullPrompt(index + 1);
-  $("nextStepButton").querySelector("strong").textContent = isFinal ? "Complete test" : "Complete step & continue";
+  $("nextStepButton").querySelector("strong").textContent = isFinal ? "Complete test" : "Continue";
   $("nextStepButton").querySelector(".button-arrow").textContent = isFinal ? "✓" : "→";
+  $("nextStepButton").classList.toggle("is-hidden", isLanding);
+  $("landingActions").classList.toggle("is-hidden", !isLanding);
 }
 
 function updateTimers() {
@@ -201,9 +207,9 @@ async function startTest() {
   requestWakeLock();
 }
 
-async function completeCurrentStep() {
-  const button = $("nextStepButton");
-  button.disabled = true;
+async function completeCurrentStep(landingResult = null) {
+  const buttons = [$("nextStepButton"), $("landingSuccessButton"), $("landingFailureButton")];
+  buttons.forEach((button) => { button.disabled = true; });
   const transitionMs = Date.now();
   const completedAt = new Date(transitionMs).toISOString();
   const startedMs = new Date(currentTest.stepStartedAt).getTime();
@@ -214,7 +220,10 @@ async function completeCurrentStep() {
     startedAt: currentTest.stepStartedAt,
     completedAt,
     durationMilliseconds: transitionMs - startedMs,
-    cumulativeMilliseconds: cumulativeMs
+    cumulativeMilliseconds: cumulativeMs,
+    landingResult,
+    photoRequired: /take a picture/i.test(fullPrompt(currentTest.currentStepIndex)),
+    photoReview: null
   });
 
   if (currentTest.currentStepIndex === PROMPTS.length - 1) {
@@ -235,7 +244,7 @@ async function completeCurrentStep() {
     updateTimers();
     $("saveConfirmation").textContent = `Step ${currentTest.currentStepIndex} saved · Step ${currentTest.currentStepIndex + 1} started at ${formatClock(completedAt)}`;
   }
-  setTimeout(() => { button.disabled = false; }, 250);
+  setTimeout(() => buttons.forEach((button) => { button.disabled = false; }), 250);
 }
 
 function addMeta(container, pairs, className = "") {
@@ -252,8 +261,42 @@ function addMeta(container, pairs, className = "") {
   });
 }
 
+function normalizeTestRecord(test) {
+  test.steps = (test.steps || []).map((step) => ({
+    ...step,
+    landingResult: step.landingResult || null,
+    photoRequired: step.photoRequired ?? /take a picture/i.test(step.prompt || ""),
+    photoReview: step.photoReview || null
+  }));
+  return test;
+}
+
+function getOutcome(test) {
+  const steps = test.steps || [];
+  if (steps.some((step) => step.landingResult === "unsuccessful") || steps.some((step) => step.photoReview === "fail")) {
+    return { label: "Failed", className: "outcome-fail" };
+  }
+  const photos = steps.filter((step) => step.photoRequired);
+  if (photos.length && photos.every((step) => step.photoReview === "pass")) {
+    return { label: "Passed", className: "outcome-pass" };
+  }
+  return { label: "Pending photo review", className: "outcome-pending" };
+}
+
+function stepResultText(step) {
+  if (step.landingResult === "successful") return "Landing: successful";
+  if (step.landingResult === "unsuccessful") return "Landing: unsuccessful";
+  if (step.photoRequired && step.photoReview === "pass") return "Photo: pass";
+  if (step.photoRequired && step.photoReview === "fail") return "Photo: fail";
+  if (step.photoRequired) return "Photo: not reviewed";
+  return "—";
+}
+
 function renderResults(test) {
-  currentTest = test;
+  currentTest = normalizeTestRecord(test);
+  const outcome = getOutcome(currentTest);
+  $("outcomeBadge").textContent = outcome.label;
+  $("outcomeBadge").className = `outcome-badge ${outcome.className}`;
   $("resultsSubtitle").textContent = `${test.pilot} · ${test.drone} · ${formatDate(test.completedAt)}`;
   $("resultTotal").textContent = formatDuration(test.totalMilliseconds);
   $("reportTotal").textContent = formatDuration(test.totalMilliseconds);
@@ -264,14 +307,15 @@ function renderResults(test) {
     ["Aircraft", test.drone],
     ["Started", formatDate(test.startedAt)],
     ["Completed", formatDate(test.completedAt)],
-    ["Timed prompts", String(test.steps.length)]
+    ["Timed prompts", String(test.steps.length)],
+    ["Outcome", outcome.label]
   ]);
 
   const tbody = $("resultsTableBody");
   tbody.innerHTML = "";
   test.steps.forEach((step) => {
     const tr = document.createElement("tr");
-    [step.number, step.prompt, formatClock(step.completedAt), formatDuration(step.durationMilliseconds), formatDuration(step.cumulativeMilliseconds)].forEach((value) => {
+    [step.number, step.prompt, formatClock(step.completedAt), formatDuration(step.durationMilliseconds), formatDuration(step.cumulativeMilliseconds), stepResultText(step)].forEach((value) => {
       const td = document.createElement("td");
       td.textContent = value;
       tr.append(td);
@@ -301,14 +345,66 @@ function csvEscape(value) {
 }
 
 function exportCsv() {
+  const outcome = getOutcome(currentTest).label;
   const rows = [
     ["Test ID", currentTest.id], ["Pilot", currentTest.pilot], ["Proctor", currentTest.instructor],
     ["Drone", currentTest.drone], ["Started", currentTest.startedAt], ["Completed", currentTest.completedAt],
-    ["Total milliseconds", currentTest.totalMilliseconds], [],
-    ["Step", "Prompt", "Started", "Completed", "Duration ms", "Cumulative ms"],
-    ...currentTest.steps.map((s) => [s.number, s.prompt, s.startedAt, s.completedAt, s.durationMilliseconds, s.cumulativeMilliseconds])
+    ["Total milliseconds", currentTest.totalMilliseconds], ["Outcome", outcome], [],
+    ["Step", "Prompt", "Started", "Completed", "Duration ms", "Cumulative ms", "Landing result", "Photo review"],
+    ...currentTest.steps.map((s) => [s.number, s.prompt, s.startedAt, s.completedAt, s.durationMilliseconds, s.cumulativeMilliseconds, s.landingResult || "", s.photoReview || ""])
   ];
   downloadBlob(`${currentTest.id}.csv`, rows.map((row) => row.map(csvEscape).join(",")).join("\n"), "text/csv;charset=utf-8");
+}
+
+function startPhotoReview(test) {
+  currentTest = normalizeTestRecord(test);
+  reviewSteps = currentTest.steps.filter((step) => step.photoRequired);
+  const firstUnreviewed = reviewSteps.findIndex((step) => !step.photoReview);
+  reviewIndex = firstUnreviewed >= 0 ? firstUnreviewed : 0;
+  renderPhotoReview();
+  showView("reviewView");
+}
+
+function renderPhotoReview() {
+  const step = reviewSteps[reviewIndex];
+  if (!step) {
+    renderResults(currentTest);
+    showView("resultsView");
+    return;
+  }
+  const percent = Math.round(((reviewIndex + 1) / reviewSteps.length) * 100);
+  $("reviewProgress").textContent = `Photo ${reviewIndex + 1} of ${reviewSteps.length}`;
+  $("reviewProgressBar").style.width = `${percent}%`;
+  $("reviewStep").textContent = `Step ${step.number}`;
+  $("reviewTitle").textContent = step.prompt;
+  $("reviewContext").textContent = `${currentTest.pilot} · ${currentTest.drone}`;
+  $("reviewChoice").textContent = step.photoReview ? `Marked ${step.photoReview}` : "Not reviewed";
+  $("reviewChoice").className = `review-choice ${step.photoReview ? `is-${step.photoReview}` : ""}`;
+  $("previousPhotoButton").disabled = reviewIndex === 0;
+  $("nextPhotoButton").textContent = reviewIndex === reviewSteps.length - 1 ? "Finish review →" : "Next →";
+}
+
+async function markPhotoReview(result) {
+  reviewSteps[reviewIndex].photoReview = result;
+  currentTest.reviewUpdatedAt = new Date().toISOString();
+  await saveTest(currentTest);
+  if (reviewIndex < reviewSteps.length - 1) {
+    reviewIndex += 1;
+    renderPhotoReview();
+  } else {
+    renderResults(currentTest);
+    showView("resultsView");
+    await renderHistory();
+  }
+}
+
+async function importCompletedTest(file) {
+  const imported = normalizeTestRecord(JSON.parse(await file.text()));
+  if (!imported.id || imported.status !== "completed" || !Array.isArray(imported.steps)) throw new Error("This is not a completed test record.");
+  imported.importedAt = new Date().toISOString();
+  await saveTest(imported);
+  $("importStatus").textContent = `Imported ${imported.pilot}'s completed test.`;
+  await renderHistory();
 }
 
 async function renderHistory() {
@@ -406,11 +502,30 @@ $("setupForm").addEventListener("submit", (event) => {
 
 $("backToSetup").addEventListener("click", () => showView("setupView"));
 $("startTestButton").addEventListener("click", startTest);
-$("nextStepButton").addEventListener("click", completeCurrentStep);
+$("nextStepButton").addEventListener("click", () => completeCurrentStep());
+$("landingSuccessButton").addEventListener("click", () => completeCurrentStep("successful"));
+$("landingFailureButton").addEventListener("click", () => completeCurrentStep("unsuccessful"));
 $("printButton").addEventListener("click", () => window.print());
+$("reviewButton").addEventListener("click", () => startPhotoReview(currentTest));
 $("jsonButton").addEventListener("click", exportJson);
 $("csvButton").addEventListener("click", exportCsv);
 $("newTestButton").addEventListener("click", resetToSetup);
+$("backToResultsButton").addEventListener("click", () => { renderResults(currentTest); showView("resultsView"); });
+$("photoPassButton").addEventListener("click", () => markPhotoReview("pass"));
+$("photoFailButton").addEventListener("click", () => markPhotoReview("fail"));
+$("previousPhotoButton").addEventListener("click", () => { if (reviewIndex > 0) { reviewIndex -= 1; renderPhotoReview(); } });
+$("nextPhotoButton").addEventListener("click", () => {
+  if (reviewIndex < reviewSteps.length - 1) { reviewIndex += 1; renderPhotoReview(); }
+  else { renderResults(currentTest); showView("resultsView"); }
+});
+$("importButton").addEventListener("click", () => $("importFile").click());
+$("importFile").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try { await importCompletedTest(file); }
+  catch (error) { $("importStatus").textContent = error.message || "Unable to import this test."; }
+  event.target.value = "";
+});
 $("homeButton").addEventListener("click", () => {
   if (currentTest?.status === "active") return;
   showView("setupView");

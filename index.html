@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#07131f" />
     <meta name="description" content="On-device proctoring timer for the NIST Open Lane Level 1 drone flight test." />
-    <title>NIST Level 1 Flight Test</title>
+    <title>Chandler Police Department | sUAS Pilot Certification</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -16,8 +16,9 @@
             <svg viewBox="0 0 44 44" role="img"><path d="M12 19h20M22 12v20M8 15h8v8H8zm20 0h8v8h-8zM8 27h8v8H8zm20 0h8v8h-8z"/></svg>
           </span>
           <span>
-            <strong>Open Lane</strong>
-            <small>Level 1 · 10 ft</small>
+            <strong>Chandler Police Department</strong>
+            <small>sUAS Pilot Certification</small>
+            <span class="brand-test">NIST Open Lane Level 1</span>
           </span>
         </button>
         <div class="storage-status"><span class="status-dot"></span> Saved on this device</div>
@@ -27,14 +28,9 @@
         <section class="view setup-view is-active" id="setupView" aria-labelledby="setupTitle">
           <div class="hero-grid">
             <div class="hero-copy">
-              <p class="eyebrow">Flight test proctor</p>
-              <h1 id="setupTitle">Precision, one prompt at a time.</h1>
-              <p class="lede">A focused timer for the NIST Open Lane Level 1 flight sequence. Every tap completes one step and immediately starts the next.</p>
-              <div class="test-facts" aria-label="Test summary">
-                <div><strong>39</strong><span>timed prompts</span></div>
-                <div><strong>2</strong><span>flight paths</span></div>
-                <div><strong>Local</strong><span>device storage</span></div>
-              </div>
+              <p class="eyebrow">Chandler Police Department</p>
+              <h1 id="setupTitle">sUAS Pilot Certification</h1>
+              <p class="test-title">NIST Open Lane Level 1</p>
             </div>
 
             <form class="setup-card" id="setupForm">
@@ -96,6 +92,11 @@
             <div class="history-list" id="historyList">
               <div class="empty-state">Completed tests will appear here.</div>
             </div>
+            <div class="history-import">
+              <button class="text-button" id="importButton" type="button">Import completed test JSON</button>
+              <input class="is-hidden" id="importFile" type="file" accept="application/json,.json" />
+              <p id="importStatus" aria-live="polite"></p>
+            </div>
           </section>
         </section>
 
@@ -145,7 +146,6 @@
           <article class="prompt-card">
             <span class="prompt-number" id="promptNumber">01</span>
             <div>
-              <p class="step-kicker">Current instruction</p>
               <h1 id="promptTitle">Launch to 10 feet and pitch forward over stand 1.</h1>
               <p id="promptDetail">Take a picture of bucket 1.</p>
             </div>
@@ -157,9 +157,13 @@
           </div>
 
           <button class="complete-button" id="nextStepButton" type="button">
-            <span><small>Tap when complete</small><strong>Complete step &amp; continue</strong></span>
+            <span><strong>Continue</strong></span>
             <span class="button-arrow">→</span>
           </button>
+          <div class="landing-actions is-hidden" id="landingActions">
+            <button class="landing-button landing-success" id="landingSuccessButton" type="button"><span>✓</span> Successful landing</button>
+            <button class="landing-button landing-failure" id="landingFailureButton" type="button"><span>×</span> Unsuccessful landing</button>
+          </div>
           <p class="save-confirmation" id="saveConfirmation" aria-live="polite">Step results save automatically after every tap.</p>
         </section>
 
@@ -169,6 +173,7 @@
             <p class="eyebrow">Test complete</p>
             <h1 id="resultsTitle">Flight test results</h1>
             <p id="resultsSubtitle"></p>
+            <div class="outcome-badge outcome-pending" id="outcomeBadge">Pending photo review</div>
             <div class="total-result">
               <span>Total elapsed time</span>
               <strong id="resultTotal">00:00.0</strong>
@@ -177,6 +182,7 @@
 
           <div class="results-actions no-print">
             <button class="primary-button" id="printButton" type="button">Print / Save PDF</button>
+            <button class="secondary-button" id="reviewButton" type="button">Review photos</button>
             <button class="secondary-button" id="jsonButton" type="button">Download JSON</button>
             <button class="secondary-button" id="csvButton" type="button">Download CSV</button>
             <button class="text-button" id="newTestButton" type="button">Start another test</button>
@@ -185,15 +191,16 @@
           <section class="report-sheet" id="reportSheet">
             <div class="report-header">
               <div>
-                <p>NIST Open Lane · Level 1 · 10 ft</p>
-                <h2>Flight Test Results</h2>
+                <p>Chandler Police Department</p>
+                <h2>sUAS Pilot Certification</h2>
+                <p class="report-subtitle">NIST Open Lane Level 1 · 10 ft</p>
               </div>
               <span id="reportId"></span>
             </div>
             <dl class="report-meta" id="reportMeta"></dl>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>#</th><th>Prompt</th><th>Completed</th><th>Step time</th><th>Cumulative</th></tr></thead>
+                <thead><tr><th>#</th><th>Prompt</th><th>Completed</th><th>Step time</th><th>Cumulative</th><th>Result</th></tr></thead>
                 <tbody id="resultsTableBody"></tbody>
               </table>
             </div>
@@ -204,6 +211,31 @@
             </div>
             <p class="report-footnote">Generated locally by the Open Lane Level 1 proctoring tool. This report records timing and entered test details.</p>
           </section>
+        </section>
+
+        <section class="view review-view" id="reviewView" aria-labelledby="reviewTitle">
+          <div class="review-shell">
+            <div class="review-header">
+              <button class="text-button" id="backToResultsButton" type="button">← Results</button>
+              <span id="reviewProgress">Photo 1 of 31</span>
+            </div>
+            <div class="review-progress-track"><span id="reviewProgressBar"></span></div>
+            <article class="review-card">
+              <p class="eyebrow">Post-flight photo review</p>
+              <span class="review-step" id="reviewStep">Step 1</span>
+              <h1 id="reviewTitle">Take a picture of bucket 1.</h1>
+              <p id="reviewContext"></p>
+              <div class="review-choice" id="reviewChoice">Not reviewed</div>
+            </article>
+            <div class="review-actions">
+              <button class="review-result-button review-pass" id="photoPassButton" type="button"><span>✓</span><strong>Pass</strong></button>
+              <button class="review-result-button review-fail" id="photoFailButton" type="button"><span>×</span><strong>Fail</strong></button>
+            </div>
+            <div class="review-navigation">
+              <button class="text-button" id="previousPhotoButton" type="button">← Previous</button>
+              <button class="text-button" id="nextPhotoButton" type="button">Next →</button>
+            </div>
+          </div>
         </section>
       </main>
     </div>
